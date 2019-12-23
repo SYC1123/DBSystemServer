@@ -1,6 +1,8 @@
 from socket import *
 from time import ctime
 import pymssql
+import datetime
+import json
 
 from SQLServer import SQLServer
 
@@ -47,7 +49,7 @@ def initDataBase():
         Rdate date not null,
         Rtime int not null,
         Rmoney float,
-        Primary key(Rid,Rdate)
+        Primary key(Rplaceid,Rdate)
         );
         end
         '''
@@ -86,7 +88,7 @@ def initDataBase():
         (
         Iid	varchar(10) not null,
         Ipalceid varchar(8) not null,
-        Iphoto	 image,
+        Iphoto	 varchar(MAX),
         Primary key(Iid)
         );
         end
@@ -179,13 +181,144 @@ def register(info, sqlserver):
     :param sqlserver: 数据库助手
     :return: 注册结果
     '''
-    info=info.split("&")
-    print(info)
-    # response=sqlserver.ExecQuery('select * from')
+    info = info.split("&")
+    phone = "'" + info[0] + "'"
+    name = "'" + info[1] + "'"
+    address = "'" + info[2] + "'"
+    password = "'" + info[3] + "'"
+    sql = 'select * from tab_user where Tel=%s' % (phone)
+    response = sqlserver.ExecQuery(sql)
+    if len(response) != 0:
+        return '该用户已经注册！'
+    else:
+        today = "'" + str(datetime.date.today()) + "'"
+        sql = '''insert into tab_user(Address,Name,Tel,Udate,Password,Status) values (%s,%s,%s,%s,%s,1)''' % (
+            address, name, phone, today, password)
+        print(sql)
+        sqlserver.ExecNonQuery(sql)
+        sql = '''create login [%s] with password=%s, default_database=DBSystem ''' % (info[0], password)
+        sqlserver.ExecNonQuery(sql)
+        sql = '''create user [%s] for login [%s] with default_schema=dbo''' % (info[0], info[0])
+        sqlserver.ExecNonQuery(sql)
+        sql = '''GRANT SELECT ON  tab_img TO [%s] ''' % (
+            info[0])
+        sqlserver.ExecNonQuery(sql)
+        sql = '''GRANT SELECT ON  tab_reservation TO [%s] ''' % (
+            info[0])
+        sqlserver.ExecNonQuery(sql)
+        sql = '''GRANT SELECT ON  tab_place TO [%s] ''' % (
+            info[0])
+        sqlserver.ExecNonQuery(sql)
+        sql = '''GRANT SELECT ON  tab_category TO [%s] ''' % (
+            info[0])
+        sqlserver.ExecNonQuery(sql)
+        sql = '''GRANT SELECT ON  tab_category_place TO [%s] ''' % (
+            info[0])
+        sqlserver.ExecNonQuery(sql)
+        sql = '''GRANT SELECT ON tab_favorite TO [%s] ''' % (
+            info[0])
+        sqlserver.ExecNonQuery(sql)
+        return '1'
+
+
+def login(info, sqlserver):
+    '''
+    :param info: 登录信息
+    :param sqlserver: 数据库助手
+    :return: 结果
+    '''
+    info = info.split("&")
+    account = "'" + info[0] + "'"
+    password = "'" + info[1] + "'"
+    sql = 'select * from tab_user where Tel=%s' % (account)
+    response = sqlserver.ExecQuery(sql)
+    if len(response) != 0:
+        # 该用户存在
+        # print(response)
+        # print(response[0][4])
+        if response[0][4] != info[1]:
+            return '2'
+        else:
+            jsonData = []
+            data = {}
+            data['Address'] = str(response[0][0])
+            data['Name'] = str(response[0][1])
+            data['Tel'] = str(response[0][2])
+            data['Date'] = str(response[0][3])
+            data['Password'] = str(response[0][4])
+            data['Status'] = int(response[0][5])
+            jsonData.append(data)
+            jsondatar = json.dumps(jsonData, ensure_ascii=False)
+            return jsondatar[1:len(jsondatar) - 1]
+    else:
+        return '3'
+
+
+def queryPlace(info, sqlserver):
+    '''
+    场地查询
+    :param info:查询信息
+    :param sqlserver: 数据库助手
+    :return: 已经预定的场地号，json数组带key
+    '''
+    info = "'" + info + "'"
+    sql = 'select Rplaceid,Rtime from tab_reservation where Rdate=%s' % (info)
+    response = sqlserver.ExecQuery(sql)
+    print(response)
+    # json数组带key
+    jsonDir = {}
+    jsonData = []
+    for row in response:
+        data = {}
+        data['PlaceID'] = int(row[0])
+        data['OrderTime'] = row[1]
+        jsonData.append(data)
+        jsondatar = json.dumps(jsonData, ensure_ascii=False)
+    jsonDir.update({"OrderedPlace": jsonData})
+    sql = 'select Pid from tab_place where Pstatus=0'
+    response = sqlserver.ExecQuery(sql)
+    jsonData1 = []
+    for row in response:
+        data = {}
+        data['PlaceID'] = int(row[0])
+        jsonData1.append(data)
+        jsondatar = json.dumps(jsonData1, ensure_ascii=False)
+    jsonDir.update({"RepairingPlace": jsonData1})
+    print(jsonDir)
+    return str(jsonDir)
+
+
+def queryplacedetail(info, sqlserver):
+    '''
+    查询场地详情
+    :param info:场地号
+    :param sqlserver:
+    :return: json数据
+    '''
+    sql = '''select Cname from tab_category,tab_category_place 
+          where tab_category.Cid=tab_category_place.Cid and tab_category_place.Pid=''' + info
+    response = sqlserver.ExecQuery(sql)
+    data = {}
+    details = []
+    for row in response:
+        details.append(row[0])
+    data['DetailNum'] = len(details)
+    count = 0
+    for value in details:
+        data[str(count)] = value
+        count = count + 1
+    sql = '''select Iphoto from tab_img
+             where Ipalceid=''' + info
+    response = sqlserver.ExecQuery(sql)
+    data["URL1"]=str(response[0][0])
+    data["URL2"] = str(response[1][0])
+    print(data)
+
 
 if __name__ == '__main__':
     initDataBase()
     sqlserver = SQLServer('(local)', 'sa', '123456', 'DBSystem')
+
     # 1 定义域名和端口号
     HOST, POST = '', 6666
 
@@ -221,8 +354,18 @@ if __name__ == '__main__':
             if command == 'register':
                 info = data[data.find(':') + 1:]
                 result = register(info, sqlserver)
+            elif command == 'login':
+                info = data[data.find(':') + 1:]
+                result = login(info, sqlserver)
+            elif command == 'queryplace':
+                info = data[data.find(':') + 1:]
+                result = queryPlace(info, sqlserver)
+            elif command == 'placedetail':
+                info = data[data.find(':') + 1:]
+                queryplacedetail(info, sqlserver)
+                result = '123'
             # 6.4 发送时间还有信息
-            tcpCilentSocket.send("123".encode())
+            tcpCilentSocket.send(result.encode())
         # 7 关闭资源
         tcpCilentSocket.close()
     tcpServerSocket.close()

@@ -9,7 +9,6 @@ class SQLServer:
         self.password = password
         self.database = database
 
-
     def __GetConnect(self):
         # 得到数据库连接信息，返回conn.cursor()
         if not self.database:
@@ -20,7 +19,6 @@ class SQLServer:
             raise (NameError, "连接数据库失败")  # 将DBC信息赋值给cur
         else:
             return cur
-
 
     def ExecQuery(self, sql):
         '''
@@ -33,3 +31,9 @@ class SQLServer:
         # 查询完毕关闭数据库连接
         self.conn.close()
         return result
+
+    def ExecNonQuery(self, sql):
+        cur = self.__GetConnect()
+        cur.execute(sql)
+        self.conn.commit()
+        self.conn.close()
