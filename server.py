@@ -44,12 +44,13 @@ def initDataBase():
         begin
         Create table tab_reservation
         (
+        Id int Identity(1,1),
         Rid	char(11) not null,
         Rplaceid varchar(8) not null,
         Rdate date not null,
         Rtime int not null,
         Rmoney float,
-        Primary key(Rplaceid,Rdate)
+        Primary key(Id)
         );
         end
         '''
@@ -176,6 +177,7 @@ def initDataBase():
 
 
 def register(info, sqlserver):
+    # 注册
     '''
     :param info: 注册信息
     :param sqlserver: 数据库助手
@@ -295,7 +297,7 @@ def queryplacedetail(info, sqlserver):
     :param sqlserver:
     :return: json数据
     '''
-    sql = '''select Cname from tab_category,tab_category_place 
+    sql = '''select tab_category.Cid from tab_category,tab_category_place 
           where tab_category.Cid=tab_category_place.Cid and tab_category_place.Pid=''' + info
     response = sqlserver.ExecQuery(sql)
     data = {}
@@ -310,10 +312,242 @@ def queryplacedetail(info, sqlserver):
     sql = '''select Iphoto from tab_img
              where Ipalceid=''' + info
     response = sqlserver.ExecQuery(sql)
-    data["URL1"]=str(response[0][0])
+    data["URL1"] = str(response[0][0])
     data["URL2"] = str(response[1][0])
-    print(data)
+    jsondatar = json.dumps(data, ensure_ascii=False)
+    print(jsondatar)
+    return jsondatar
 
+
+def changeinfo(info, sqlserver):
+    '''
+    基本信息修改
+    :param info:修改信息
+    :param sqlserver:
+    :return:
+    '''
+    info = info.split("&")
+    name = "'" + info[0] + "'"
+    tel = "'" + info[1] + "'"
+    address = "'" + info[2] + "'"
+    password = "'" + info[3] + "'"
+    befortel = "'" + info[4] + "'"
+    if befortel != tel:
+        sql = 'select * from tab_user where Tel=%s' % (befortel)
+        response = sqlserver.ExecQuery(sql)
+        if len(response) != 0:
+            return '该用户已经注册！'
+    else:
+        sql = "UPDATE tab_user SET Address = %s, Name = %s,Tel = %s,Password= %s WHERE Tel = %s" % (
+            address, name, tel, password, befortel)
+        sqlserver.ExecNonQuery(sql)
+        return '1'
+
+
+def collect(info, sqlserver):
+    '''
+    场地收藏
+    :param info:
+    :param sqlserver:
+    :return:
+    '''
+    info = info.split("&")
+    uid = "'" + info[0] + "'"
+    pid = "'" + info[1] + "'"
+    date = "'" + info[2] + "'"
+    sql = 'select * from tab_favorite where Uid=%s and Pid=%s' % (uid, pid)
+    response = sqlserver.ExecQuery(sql)
+    if len(response) != 0:
+        return "该场地已收藏！"
+    else:
+        sql = '''insert into tab_favorite(Uid,Pid,Fdate) values (%s,%s,%s)''' % (uid, pid, date)
+        print(sql)
+        sqlserver.ExecNonQuery(sql)
+        return "收藏成功！"
+
+
+def reservation(info, sqlserver):
+    '''
+    场地预定
+    :param info:预定信息
+    :param sqlserver:
+    :return:
+    '''
+    info = info.split("&")
+    tel = "'" + info[0] + "'"
+    position = "'" + info[1] + "'"
+    date = "'" + info[2] + "'"
+    time = "'" + info[3] + "'"
+    money = "'" + info[4] + "'"
+    sql = '''insert into  tab_reservation(Rid,Rplaceid,Rdate,Rtime,Rmoney) values (%s,%s,%s,%s,%s)''' % (
+        tel, position, date, time, money)
+    print(sql)
+    sqlserver.ExecNonQuery(sql)
+    return "预定成功！"
+
+
+def order(info, sqlserver):
+    '''
+    查看订单
+    :param info:
+    :param sqlserver:
+    :return:json数组
+    '''
+    info = "'" + info + "'"
+    sql = "EXEC GetUserOrder " + info
+    response = sqlserver.ExecQuery(sql)
+    jsonData = []
+    for row in response:
+        data = {}
+        data['PlaceID'] = int(row[2])
+        data['Date'] = row[3]
+        data['OrderTime'] = int(row[4])
+        data['Money'] = float(row[5])
+        jsonData.append(data)
+        jsondatar = json.dumps(jsonData, ensure_ascii=False)
+    print(str(jsonData))
+    return str(jsonData)
+
+
+def mycollection(info, sqlserver):
+    '''
+    查询我的收藏
+    :param info:用户电话号
+    :param sqlserver:
+    :return: json数组
+    '''
+    info = "'" + info + "'"
+    sql = "select * from View_Collection where Iphoto in (select min(Iphoto) from View_Collection group by Pid) and Uid=" + info
+    response = sqlserver.ExecQuery(sql)
+    jsonData = []
+    for row in response:
+        data = {}
+        data['PlaceID'] = int(row[1])
+        data['Date'] = row[2]
+        data['URL'] = row[3]
+        jsonData.append(data)
+        jsondatar = json.dumps(jsonData, ensure_ascii=False)
+    print(str(jsonData))
+    return str(jsonData)
+
+
+def querybad(info, sqlserver):
+    '''
+    查询需要维修的场地
+    :param info:
+    :param sqlserver:
+    :return:json数组
+    '''
+    sql = "select Pid from tab_place where Pstatus=0"
+    response = sqlserver.ExecQuery(sql)
+    jsonData = []
+    for row in response:
+        data = {}
+        data['PlaceID'] = int(row[0])
+        jsonData.append(data)
+        jsondatar = json.dumps(jsonData, ensure_ascii=False)
+    print(str(jsonData))
+    return str(jsonData)
+
+
+def repair(info, sqlserver):
+    '''
+    场地维修
+    :param info: 场地号
+    :param sqlserver:
+    :return:
+    '''
+    info = info.split("&")
+    print(info)
+    for key in info:
+        sql = '''
+        declare @Sta int=%s
+        declare @StaNo int
+        declare test_cursor cursor local 
+        for select Pstatus from tab_place
+        open test_cursor 
+        fetch next from test_cursor into @StaNo
+        while(@@FETCH_STATUS=0)
+        begin
+        set @StaNo=1
+        begin
+            update tab_place set Pstatus=@StaNo where Pid=@Sta
+        end
+        fetch next from test_cursor into @StaNo
+        end
+        close test_cursor
+        deallocate test_cursor
+        ''' % key
+        sqlserver.ExecNonQuery(sql)
+    return '维修完成！'
+
+
+def destroy(info, sqlserver):
+    '''
+    报损
+    :param info: 损坏的场地号
+    :param sqlserver:
+    :return:
+    '''
+    info = info.split("&")
+    print(info)
+    for key in info:
+        sql = '''
+            declare @Sta int=%s
+            declare @StaNo int
+            declare test_cursor cursor local 
+            for select Pstatus from tab_place
+            open test_cursor 
+            fetch next from test_cursor into @StaNo
+            while(@@FETCH_STATUS=0)
+            begin
+            set @StaNo=0
+            begin
+                update tab_place set Pstatus=@StaNo where Pid=@Sta
+            end
+            fetch next from test_cursor into @StaNo
+            end
+            close test_cursor
+            deallocate test_cursor
+            ''' % key
+        sqlserver.ExecNonQuery(sql)
+    return '报损完成！'
+
+
+def report(info, sqlserver):
+    '''
+    报表
+    :param info:
+    :param sqlserver:
+    :return:
+    '''
+    sql = "select sum(Rmoney) from tab_reservation"
+    response = sqlserver.ExecQuery(sql)
+    sql1 = "select count(*) from tab_reservation"
+    response1 = sqlserver.ExecQuery(sql1)
+    jsonData = []
+    data = {}
+    data['Money'] = str(response[0][0])
+    data['Order'] = str(response1[0][0])
+    jsonData.append(data)
+    jsondatar = json.dumps(jsonData, ensure_ascii=False)
+    print(jsonData)
+    return jsondatar[1:len(jsondatar) - 1]
+
+
+def delete(info, sqlserver):
+    '''
+    删除收藏
+    :param info:
+    :param sqlserver:
+    :return:
+    '''
+    info = info.split("&")
+    id = "'" + info[0] + "'"
+    tel = "'" + info[1] + "'"
+    sql="DELETE FROM tab_favorite WHERE Pid = %s and Uid = %s"%(id,tel)
+    sqlserver.ExecNonQuery(sql)
+    return '删除成功！'
 
 if __name__ == '__main__':
     initDataBase()
@@ -362,8 +596,37 @@ if __name__ == '__main__':
                 result = queryPlace(info, sqlserver)
             elif command == 'placedetail':
                 info = data[data.find(':') + 1:]
-                queryplacedetail(info, sqlserver)
-                result = '123'
+                result = queryplacedetail(info, sqlserver)
+            elif command == 'changeinfo':
+                info = data[data.find(':') + 1:]
+                result = changeinfo(info, sqlserver)
+            elif command == 'collect':
+                info = data[data.find(':') + 1:]
+                result = collect(info, sqlserver)
+            elif command == 'reservation':
+                info = data[data.find(':') + 1:]
+                result = reservation(info, sqlserver)
+            elif command == 'order':
+                info = data[data.find(':') + 1:]
+                result = order(info, sqlserver)
+            elif command == 'mycollection':
+                info = data[data.find(':') + 1:]
+                result = mycollection(info, sqlserver)
+            elif command == 'querybad':
+                info = data[data.find(':') + 1:]
+                result = querybad(info, sqlserver)
+            elif command == 'repair':
+                info = data[data.find(':') + 1:]
+                result = repair(info, sqlserver)
+            elif command == 'destroy':
+                info = data[data.find(':') + 1:]
+                result = destroy(info, sqlserver)
+            elif command == 'report':
+                info = data[data.find(':') + 1:]
+                result = report(info, sqlserver)
+            elif command == 'delete':
+                info = data[data.find(':') + 1:]
+                result = delete(info, sqlserver)
             # 6.4 发送时间还有信息
             tcpCilentSocket.send(result.encode())
         # 7 关闭资源
