@@ -545,9 +545,27 @@ def delete(info, sqlserver):
     info = info.split("&")
     id = "'" + info[0] + "'"
     tel = "'" + info[1] + "'"
-    sql="DELETE FROM tab_favorite WHERE Pid = %s and Uid = %s"%(id,tel)
+    sql = "DELETE FROM tab_favorite WHERE Pid = %s and Uid = %s" % (id, tel)
     sqlserver.ExecNonQuery(sql)
     return '删除成功！'
+
+
+def cancel(info, sqlserver):
+    '''
+    取消订单
+    :param info:
+    :param sqlserver:
+    :return:
+    '''
+    info = info.split("&")
+    date = "'" + info[0] + "'"
+    tel = "'" + info[1] + "'"
+    id= "'" + info[2] + "'"
+    time= "'" + info[3] + "'"
+    sql = "DELETE FROM tab_reservation WHERE Rdate = %s and Rid = %s and Rplaceid = %s and Rtime=%s" % (date, tel,id,time)
+    sqlserver.ExecNonQuery(sql)
+    return '退订成功！'
+
 
 if __name__ == '__main__':
     initDataBase()
@@ -627,6 +645,9 @@ if __name__ == '__main__':
             elif command == 'delete':
                 info = data[data.find(':') + 1:]
                 result = delete(info, sqlserver)
+            elif command == 'cancel':
+                info = data[data.find(':') + 1:]
+                result = cancel(info, sqlserver)
             # 6.4 发送时间还有信息
             tcpCilentSocket.send(result.encode())
         # 7 关闭资源
